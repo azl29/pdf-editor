@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>محرر PDF متعدد الصفحات - مع دعم العربية</title>
+  <title>محرر PDF مع دعم العربية والصور</title>
   <style>
     body {
       font-family: 'Cairo', sans-serif;
@@ -22,11 +23,10 @@
     canvas {
       border: 1px solid #ccc;
     }
-    .draggable-text {
+    .draggable-text, .draggable-img {
       position: absolute;
       cursor: move;
       user-select: none;
-      color: red;
     }
     .controls {
       margin: 20px 0;
@@ -35,10 +35,14 @@
       padding: 8px;
       margin: 5px;
     }
+    img.preview {
+      max-width: 100px;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
-  <h2>محرر PDF متعدد الصفحات - مع دعم اللغة العربية</h2>
+  <h2>محرر PDF متعدد الصفحات - مع دعم العربية وإدراج الصور</h2>
 
   <div class="controls">
     <input type="file" id="fileInput" accept="application/pdf">
@@ -54,6 +58,10 @@
     </select>
     <label>اللون</label>
     <input type="color" id="textColor" value="#d50000">
+    <br>
+    <label>أضف توقيع / صورة:</label>
+    <input type="file" id="imageInput" accept="image/*">
+    <br>
     <button onclick="downloadPDF()">تحميل الملف بعد التعديل</button>
   </div>
 
@@ -62,7 +70,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <script>
-    let pdfDoc, originalPdfDoc, canvases = [], texts = [];
+    let pdfDoc, originalPdfDoc, canvases = [], texts = [], images = [];
 
     document.getElementById('fileInput').addEventListener('change', async function (e) {
       const file = e.target.files[0];
@@ -108,6 +116,9 @@
           const y = e.clientY - rect.top;
           insertText(pageDiv, x, y, i - 1);
         });
+
+        pageDiv.addEventListener('dragover', e => e.preventDefault());
+        pageDiv.addEventListener('drop', e => handleImageDrop(e, pageDiv, i - 1));
       }
     }
 
@@ -133,38 +144,52 @@
 
     function makeDraggable(el) {
       let isDragging = false, offsetX = 0, offsetY = 0;
-
       el.addEventListener('mousedown', function (e) {
         isDragging = true;
         offsetX = e.offsetX;
         offsetY = e.offsetY;
         el.style.zIndex = 1000;
       });
-
       document.addEventListener('mousemove', function (e) {
         if (isDragging) {
           el.style.left = (e.pageX - offsetX - el.parentElement.offsetLeft) + 'px';
           el.style.top = (e.pageY - offsetY - el.parentElement.offsetTop) + 'px';
         }
       });
-
       document.addEventListener('mouseup', function () {
         isDragging = false;
       });
     }
+
+    document.getElementById('imageInput').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function () {
+        const img = document.createElement('img');
+        img.src = reader.result;
+        img.className = 'draggable-img';
+        img.style.width = '100px';
+        img.style.top = '20px';
+        img.style.left = '20px';
+        img.draggable = true;
+        makeDraggable(img);
+        canvases[0].container.appendChild(img);
+        images.push({ pageIndex: 0, element: img, src: reader.result });
+      };
+      reader.readAsDataURL(file);
+    });
 
     async function downloadPDF() {
       const fontUrl = 'https://pdf-lib.js.org/assets/fonts/Amiri-Regular.ttf';
       const fontBytes = await fetch(fontUrl).then(res => res.arrayBuffer());
       const customFont = await pdfDoc.embedFont(fontBytes, { subset: true });
 
-      texts.forEach(({ pageIndex, element }) => {
+      for (let { pageIndex, element } of texts) {
         const text = element.innerText.split('').reverse().join('');
         const x = parseInt(element.style.left);
         const y = parseInt(element.style.top);
         const size = parseInt(element.style.fontSize);
         const color = hexToRgb(element.style.color);
-
         const page = pdfDoc.getPages()[pageIndex];
         page.drawText(text, {
           x: x,
@@ -173,7 +198,23 @@
           font: customFont,
           color: PDFLib.rgb(color.r / 255, color.g / 255, color.b / 255),
         });
-      });
+      }
+
+      for (let { pageIndex, element, src } of images) {
+        const imgBytes = await fetch(src).then(res => res.arrayBuffer());
+        const embeddedImg = await pdfDoc.embedPng(imgBytes);
+        const page = pdfDoc.getPages()[pageIndex];
+        const x = parseInt(element.style.left);
+        const y = parseInt(element.style.top);
+        const w = element.width;
+        const h = element.height;
+        page.drawImage(embeddedImg, {
+          x: x,
+          y: page.getHeight() - y - h,
+          width: w,
+          height: h,
+        });
+      }
 
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
