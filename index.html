@@ -2,16 +2,21 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>محرر PDF</title>
+  <title>محرر PDF متعدد الصفحات</title>
   <style>
     body {
       font-family: 'Cairo', sans-serif;
       margin: 20px;
       text-align: center;
     }
+    .pdf-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
     canvas {
       border: 1px solid #ccc;
-      margin-top: 10px;
+      margin: 10px 0;
       cursor: crosshair;
     }
     .controls {
@@ -21,16 +26,10 @@
       padding: 8px;
       margin: 5px;
     }
-    #signaturePad {
-      border: 1px solid #aaa;
-      background: #fff;
-      display: none;
-      margin: 10px auto;
-    }
   </style>
 </head>
 <body>
-  <h2>محرر PDF - إضافة نصوص وتواقيع</h2>
+  <h2>محرر PDF متعدد الصفحات</h2>
   <input type="file" id="pdfUpload" accept="application/pdf" />
   <div class="controls">
     <input type="text" id="textInput" placeholder="اكتب النص هنا" />
@@ -39,38 +38,76 @@
       <option value="20" selected>20px</option>
       <option value="24">24px</option>
       <option value="30">30px</option>
-      <option value="36">36px</option>
     </select>
     <input type="color" id="textColor" value="#ff0000" />
-    <select id="fontWeight">
-      <option value="normal">عادي</option>
-      <option value="bold">عريض</option>
-    </select>
-    <select id="textAlign">
-      <option value="right" selected>يمين</option>
-      <option value="center">وسط</option>
-      <option value="left">يسار</option>
-    </select>
+    <button id="savePdf">حفظ PDF</button>
   </div>
-  <div>
-    <button id="addTextBtn">أضف النص</button>
-    <button id="saveBtn">حفظ كـ PDF</button>
-  </div>
-  <div class="controls">
-    <label>إدراج توقيع/صورة:</label>
-    <input type="file" id="imageUpload" accept="image/*" />
-    <button id="drawSignatureBtn">ارسم توقيعك</button>
-  </div>
-
-  <canvas id="signaturePad" width="300" height="150"></canvas>
-  <button id="applySignatureBtn" style="display:none">إدراج التوقيع</button>
-
-  <canvas id="pdfCanvas"></canvas>
+  <div id="pdfContainer" class="pdf-container"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
-    // JavaScript code skipped here to avoid length limits
+    const pdfUpload = document.getElementById("pdfUpload");
+    const textInput = document.getElementById("textInput");
+    const fontSize = document.getElementById("fontSize");
+    const textColor = document.getElementById("textColor");
+    const pdfContainer = document.getElementById("pdfContainer");
+    const savePdf = document.getElementById("savePdf");
+
+    let pages = [];
+
+    pdfUpload.addEventListener("change", async function(e) {
+      pdfContainer.innerHTML = "";
+      pages = [];
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = async function() {
+        const typedarray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.dataset.page = i;
+
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          pdfContainer.appendChild(canvas);
+
+          const drawings = [];
+
+          canvas.addEventListener("click", function(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            const text = textInput.value;
+            const size = fontSize.value;
+            const color = textColor.value;
+            ctx.font = `${size}px Cairo`;
+            ctx.fillStyle = color;
+            ctx.textAlign = "right";
+            ctx.fillText(text, x, y);
+            drawings.push({ text, x, y, size, color });
+          });
+
+          pages.push({ canvas, drawings });
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    savePdf.addEventListener("click", function() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      pages.forEach((page, index) => {
+        const imgData = page.canvas.toDataURL("image/jpeg");
+        if (index > 0) doc.addPage();
+        doc.addImage(imgData, "JPEG", 0, 0, doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight());
+      });
+      doc.save("محرر.pdf");
+    });
   </script>
 </body>
 </html>
