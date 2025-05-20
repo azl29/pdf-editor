@@ -3,21 +3,21 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>محرر PDF - شامل النصوص والصور والتواقيع</title>
+  <title>محرر PDF شامل - حذف، تكبير، توقيع</title>
   <style>
-    body { font-family: 'Cairo', sans-serif; margin: 20px; direction: rtl; text-align: center; }
-    .controls { margin-bottom: 20px; }
+    body { font-family: 'Cairo', sans-serif; margin: 20px; text-align: center; direction: rtl; }
+    .controls { margin: 15px 0; }
     input, select, button { padding: 8px; margin: 5px; }
     .pdf-container { display: flex; flex-direction: column; align-items: center; }
     .page-container { position: relative; margin-bottom: 30px; }
     canvas { border: 1px solid #ccc; }
-    .draggable { position: absolute; cursor: move; user-select: none; }
-    .resizable { resize: both; overflow: hidden; }
+    .draggable { position: absolute; cursor: move; user-select: none; border: 1px dashed transparent; }
+    .draggable.selected { border-color: red; }
     .signature-pad { display: none; border: 1px solid #999; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <h2>محرر PDF يدعم العربية والتوقيع والصور</h2>
+  <h2>محرر PDF شامل - يدعم العربية والتوقيع</h2>
 
   <div class="controls">
     <input type="file" id="fileInput" accept="application/pdf">
@@ -25,8 +25,9 @@
     <select id="fontSize"><option>12</option><option>14</option><option selected>18</option><option>24</option><option>32</option></select>
     <input type="color" id="textColor" value="#d50000">
     <input type="file" id="imageInput" accept="image/*">
-    <button onclick="toggleSignature()">ارسم توقيعك</button>
-    <button onclick="downloadPDF()">تحميل PDF</button>
+    <button onclick="toggleSignature()">ارسم توقيع</button>
+    <button onclick="deleteSelected()">🗑️ حذف العنصر</button>
+    <button onclick="downloadPDF()">📥 تحميل PDF</button>
   </div>
 
   <canvas id="signatureCanvas" class="signature-pad" width="300" height="150"></canvas>
@@ -37,9 +38,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <script>
-    let pdfDoc, originalPdfDoc, canvases = [], texts = [], images = [];
-    const signatureCanvas = document.getElementById('signatureCanvas');
-    const sigCtx = signatureCanvas.getContext('2d');
+    let pdfDoc, originalPdfDoc, canvases = [], texts = [], images = [], selectedElement = null;
+    const sigCanvas = document.getElementById('signatureCanvas');
+    const sigCtx = sigCanvas.getContext('2d');
     let isDrawing = false;
 
     document.getElementById('fileInput').addEventListener('change', async function(e) {
@@ -62,7 +63,6 @@
       for (let i = 1; i <= originalPdfDoc.numPages; i++) {
         const page = await originalPdfDoc.getPage(i);
         const viewport = page.getViewport({ scale: 1.5 });
-
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -81,7 +81,6 @@
           const text = document.getElementById('arabicText').value;
           const fontSize = document.getElementById('fontSize').value;
           const color = document.getElementById('textColor').value;
-
           const divText = document.createElement('div');
           divText.className = 'draggable';
           divText.innerText = text;
@@ -90,6 +89,7 @@
           divText.style.fontSize = fontSize + 'px';
           divText.style.color = color;
           divText.contentEditable = true;
+          divText.onclick = () => selectElement(divText);
           makeDraggable(divText);
           div.appendChild(divText);
           texts.push({ pageIndex: i - 1, element: divText });
@@ -103,6 +103,7 @@
         isDown = true;
         offsetX = e.offsetX;
         offsetY = e.offsetY;
+        selectElement(el);
       });
       document.addEventListener('mousemove', e => {
         if (!isDown) return;
@@ -112,16 +113,34 @@
       document.addEventListener('mouseup', () => isDown = false);
     }
 
+    function selectElement(el) {
+      if (selectedElement) selectedElement.classList.remove('selected');
+      selectedElement = el;
+      el.classList.add('selected');
+    }
+
+    function deleteSelected() {
+      if (selectedElement) {
+        selectedElement.remove();
+        texts = texts.filter(t => t.element !== selectedElement);
+        images = images.filter(i => i.element !== selectedElement);
+        selectedElement = null;
+      }
+    }
+
     document.getElementById('imageInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onload = function() {
         const img = document.createElement('img');
         img.src = reader.result;
-        img.className = 'draggable resizable';
-        img.style.width = '150px';
-        img.style.top = '30px';
+        img.className = 'draggable';
         img.style.left = '30px';
+        img.style.top = '30px';
+        img.style.width = '150px';
+        img.style.resize = 'both';
+        img.style.overflow = 'hidden';
+        img.onclick = () => selectElement(img);
         makeDraggable(img);
         canvases[0].container.appendChild(img);
         images.push({ pageIndex: 0, element: img, src: reader.result });
@@ -130,19 +149,19 @@
     });
 
     function toggleSignature() {
-      signatureCanvas.style.display = 'block';
+      sigCanvas.style.display = 'block';
       document.getElementById('applySignature').style.display = 'inline-block';
-      sigCtx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+      sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
     }
 
-    signatureCanvas.addEventListener('mousedown', () => isDrawing = true);
-    signatureCanvas.addEventListener('mouseup', () => {
+    sigCanvas.addEventListener('mousedown', () => isDrawing = true);
+    sigCanvas.addEventListener('mouseup', () => {
       isDrawing = false;
       sigCtx.beginPath();
     });
-    signatureCanvas.addEventListener('mousemove', e => {
+    sigCanvas.addEventListener('mousemove', e => {
       if (!isDrawing) return;
-      const rect = signatureCanvas.getBoundingClientRect();
+      const rect = sigCanvas.getBoundingClientRect();
       sigCtx.lineWidth = 2;
       sigCtx.lineCap = 'round';
       sigCtx.strokeStyle = '#000';
@@ -153,61 +172,69 @@
     });
 
     document.getElementById('applySignature').addEventListener('click', () => {
-      const url = signatureCanvas.toDataURL();
+      const url = sigCanvas.toDataURL();
       const img = document.createElement('img');
       img.src = url;
-      img.className = 'draggable resizable';
-      img.style.width = '150px';
-      img.style.top = '30px';
+      img.className = 'draggable';
       img.style.left = '30px';
+      img.style.top = '30px';
+      img.style.width = '150px';
+      img.style.resize = 'both';
+      img.style.overflow = 'hidden';
+      img.onclick = () => selectElement(img);
       makeDraggable(img);
       canvases[0].container.appendChild(img);
       images.push({ pageIndex: 0, element: img, src: url });
-      signatureCanvas.style.display = 'none';
+      sigCanvas.style.display = 'none';
       document.getElementById('applySignature').style.display = 'none';
     });
 
     async function downloadPDF() {
       const fontBytes = await fetch('https://pdf-lib.js.org/assets/fonts/Amiri-Regular.ttf').then(r => r.arrayBuffer());
       const font = await pdfDoc.embedFont(fontBytes);
-      texts.forEach(({ pageIndex, element }) => {
+      for (let { pageIndex, element } of texts) {
         const page = pdfDoc.getPages()[pageIndex];
         const x = parseInt(element.style.left), y = parseInt(element.style.top);
         const size = parseInt(element.style.fontSize);
         const color = hexToRgb(element.style.color);
         const text = element.innerText.split('').reverse().join('');
         page.drawText(text, {
-          x, y: page.getHeight() - y - size, size,
-          font, color: PDFLib.rgb(color.r / 255, color.g / 255, color.b / 255)
+          x: x,
+          y: page.getHeight() - y - size,
+          size: size,
+          font: font,
+          color: PDFLib.rgb(color.r / 255, color.g / 255, color.b / 255)
         });
-      });
+      }
 
-      for (const { pageIndex, element, src } of images) {
+      for (let { pageIndex, element, src } of images) {
         const imgBytes = await fetch(src).then(r => r.arrayBuffer());
         const imgEmbed = await pdfDoc.embedPng(imgBytes);
         const page = pdfDoc.getPages()[pageIndex];
         const x = parseInt(element.style.left), y = parseInt(element.style.top);
-        const w = element.clientWidth, h = element.clientHeight;
+        const w = element.width, h = element.height;
         page.drawImage(imgEmbed, {
-          x, y: page.getHeight() - y - h, width: w, height: h
+          x: x,
+          y: page.getHeight() - y - h,
+          width: w,
+          height: h
         });
       }
 
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'ملف_نهائي.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'ملف_نهائي.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
     }
 
     function hexToRgb(hex) {
-      const num = parseInt(hex.slice(1), 16);
-      return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+      const int = parseInt(hex.slice(1), 16);
+      return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
     }
   </script>
 </body>
