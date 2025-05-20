@@ -34,10 +34,13 @@
   <div class="controls">
     <input type="text" id="textInput" placeholder="اكتب النص هنا" />
     <select id="fontSize">
+      <option value="12">12px</option>
+      <option value="14">14px</option>
       <option value="16">16px</option>
       <option value="20" selected>20px</option>
       <option value="24">24px</option>
-      <option value="30">30px</option>
+      <option value="28">28px</option>
+      <option value="32">32px</option>
     </select>
     <input type="color" id="textColor" value="#ff0000" />
     <button id="savePdf">حفظ PDF</button>
@@ -55,6 +58,8 @@
     const savePdf = document.getElementById("savePdf");
 
     let pages = [];
+    let draggingItem = null;
+    let offsetX = 0, offsetY = 0;
 
     pdfUpload.addEventListener("change", async function(e) {
       pdfContainer.innerHTML = "";
@@ -76,7 +81,7 @@
           await page.render({ canvasContext: ctx, viewport }).promise;
           pdfContainer.appendChild(canvas);
 
-          const drawings = [];
+          const items = [];
 
           canvas.addEventListener("click", function(event) {
             const rect = canvas.getBoundingClientRect();
@@ -89,14 +94,53 @@
             ctx.fillStyle = color;
             ctx.textAlign = "right";
             ctx.fillText(text, x, y);
-            drawings.push({ text, x, y, size, color });
+            items.push({ text, x, y, size, color });
           });
 
-          pages.push({ canvas, drawings });
+          canvas.addEventListener("mousedown", function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const found = items.find(t => x >= t.x - 100 && x <= t.x + 100 && y >= t.y - 20 && y <= t.y + 20);
+            if (found) {
+              draggingItem = { canvas, item: found };
+              offsetX = x - found.x;
+              offsetY = y - found.y;
+            }
+          });
+
+          canvas.addEventListener("mousemove", function(e) {
+            if (draggingItem && draggingItem.canvas === canvas) {
+              const rect = canvas.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const y = e.clientY - rect.top;
+              draggingItem.item.x = x - offsetX;
+              draggingItem.item.y = y - offsetY;
+              renderAll();
+            }
+          });
+
+          canvas.addEventListener("mouseup", function() {
+            draggingItem = null;
+          });
+
+          pages.push({ canvas, ctx, viewport, items });
         }
       };
       reader.readAsArrayBuffer(file);
     });
+
+    function renderAll() {
+      pages.forEach(({ canvas, ctx, items }) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        items.forEach(({ text, x, y, size, color }) => {
+          ctx.font = `${size}px Cairo`;
+          ctx.fillStyle = color;
+          ctx.textAlign = "right";
+          ctx.fillText(text, x, y);
+        });
+      });
+    }
 
     savePdf.addEventListener("click", function() {
       const { jsPDF } = window.jspdf;
