@@ -3,9 +3,9 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>محرر PDF شامل - حذف، تكبير، توقيع</title>
+  <title>محرر PDF شامل - تحميل مضمون</title>
   <style>
-    body { font-family: 'Cairo', sans-serif; margin: 20px; text-align: center; direction: rtl; }
+    body { font-family: 'Cairo', sans-serif; text-align: center; direction: rtl; margin: 20px; }
     .controls { margin: 15px 0; }
     input, select, button { padding: 8px; margin: 5px; }
     .pdf-container { display: flex; flex-direction: column; align-items: center; }
@@ -17,7 +17,7 @@
   </style>
 </head>
 <body>
-  <h2>محرر PDF شامل - يدعم العربية والتوقيع</h2>
+  <h2>محرر PDF شامل - يدعم العربية والتوقيع والتحميل المضمون</h2>
 
   <div class="controls">
     <input type="file" id="fileInput" accept="application/pdf">
@@ -25,7 +25,7 @@
     <select id="fontSize"><option>12</option><option>14</option><option selected>18</option><option>24</option><option>32</option></select>
     <input type="color" id="textColor" value="#d50000">
     <input type="file" id="imageInput" accept="image/*">
-    <button onclick="toggleSignature()">ارسم توقيع</button>
+    <button onclick="toggleSignature()">✍️ ارسم توقيع</button>
     <button onclick="deleteSelected()">🗑️ حذف العنصر</button>
     <button onclick="downloadPDF()">📥 تحميل PDF</button>
   </div>
@@ -72,7 +72,7 @@
         const div = document.createElement('div');
         div.className = 'page-container';
         div.appendChild(canvas);
-        document.getElementById('pdfContainer').appendChild(div);
+        container.appendChild(div);
 
         canvases.push({ canvas, container: div, pageIndex: i - 1 });
 
@@ -138,8 +138,6 @@
         img.style.left = '30px';
         img.style.top = '30px';
         img.style.width = '150px';
-        img.style.resize = 'both';
-        img.style.overflow = 'hidden';
         img.onclick = () => selectElement(img);
         makeDraggable(img);
         canvases[0].container.appendChild(img);
@@ -155,10 +153,7 @@
     }
 
     sigCanvas.addEventListener('mousedown', () => isDrawing = true);
-    sigCanvas.addEventListener('mouseup', () => {
-      isDrawing = false;
-      sigCtx.beginPath();
-    });
+    sigCanvas.addEventListener('mouseup', () => { isDrawing = false; sigCtx.beginPath(); });
     sigCanvas.addEventListener('mousemove', e => {
       if (!isDrawing) return;
       const rect = sigCanvas.getBoundingClientRect();
@@ -179,8 +174,6 @@
       img.style.left = '30px';
       img.style.top = '30px';
       img.style.width = '150px';
-      img.style.resize = 'both';
-      img.style.overflow = 'hidden';
       img.onclick = () => selectElement(img);
       makeDraggable(img);
       canvases[0].container.appendChild(img);
@@ -194,42 +187,42 @@
       const font = await pdfDoc.embedFont(fontBytes);
       for (let { pageIndex, element } of texts) {
         const page = pdfDoc.getPages()[pageIndex];
-        const x = parseInt(element.style.left), y = parseInt(element.style.top);
+        const x = parseInt(element.style.left);
+        const y = parseInt(element.style.top);
         const size = parseInt(element.style.fontSize);
         const color = hexToRgb(element.style.color);
+        if (isNaN(x) || isNaN(y) || isNaN(size)) continue;
         const text = element.innerText.split('').reverse().join('');
         page.drawText(text, {
-          x: x,
-          y: page.getHeight() - y - size,
-          size: size,
-          font: font,
+          x, y: page.getHeight() - y - size, size, font,
           color: PDFLib.rgb(color.r / 255, color.g / 255, color.b / 255)
         });
       }
 
       for (let { pageIndex, element, src } of images) {
+        const x = parseInt(element.style.left);
+        const y = parseInt(element.style.top);
+        const w = element.clientWidth;
+        const h = element.clientHeight;
+        if (isNaN(x) || isNaN(y) || isNaN(w) || isNaN(h)) continue;
+        const page = pdfDoc.getPages()[pageIndex];
         const imgBytes = await fetch(src).then(r => r.arrayBuffer());
         const imgEmbed = await pdfDoc.embedPng(imgBytes);
-        const page = pdfDoc.getPages()[pageIndex];
-        const x = parseInt(element.style.left), y = parseInt(element.style.top);
-        const w = element.width, h = element.height;
         page.drawImage(imgEmbed, {
-          x: x,
-          y: page.getHeight() - y - h,
-          width: w,
-          height: h
+          x, y: page.getHeight() - y - h, width: w, height: h
         });
       }
 
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = url;
       link.download = 'ملف_نهائي.pdf';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      URL.revokeObjectURL(url);
     }
 
     function hexToRgb(hex) {
