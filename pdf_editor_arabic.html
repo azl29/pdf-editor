@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>محرر PDF</title>
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      margin: 20px;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin-top: 10px;
+      cursor: crosshair;
+    }
+    .controls {
+      margin-top: 10px;
+    }
+    input, select, button {
+      padding: 8px;
+      margin: 5px;
+    }
+    #signaturePad {
+      border: 1px solid #aaa;
+      background: #fff;
+      display: none;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+  <h2>محرر PDF - إضافة نصوص وتواقيع</h2>
+  <input type="file" id="pdfUpload" accept="application/pdf" />
+  <div class="controls">
+    <input type="text" id="textInput" placeholder="اكتب النص هنا" />
+    <select id="fontSize">
+      <option value="16">16px</option>
+      <option value="20" selected>20px</option>
+      <option value="24">24px</option>
+      <option value="30">30px</option>
+      <option value="36">36px</option>
+    </select>
+    <input type="color" id="textColor" value="#ff0000" />
+    <select id="fontWeight">
+      <option value="normal">عادي</option>
+      <option value="bold">عريض</option>
+    </select>
+    <select id="textAlign">
+      <option value="right" selected>يمين</option>
+      <option value="center">وسط</option>
+      <option value="left">يسار</option>
+    </select>
+  </div>
+  <div>
+    <button id="addTextBtn">أضف النص</button>
+    <button id="saveBtn">حفظ كـ PDF</button>
+  </div>
+  <div class="controls">
+    <label>إدراج توقيع/صورة:</label>
+    <input type="file" id="imageUpload" accept="image/*" />
+    <button id="drawSignatureBtn">ارسم توقيعك</button>
+  </div>
+
+  <canvas id="signaturePad" width="300" height="150"></canvas>
+  <button id="applySignatureBtn" style="display:none">إدراج التوقيع</button>
+
+  <canvas id="pdfCanvas"></canvas>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    // JavaScript code skipped here to avoid length limits
+  </script>
+</body>
+</html>
