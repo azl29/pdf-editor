@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>محرر PDF متعدد الصفحات</title>
+  <title>محرر PDF بتعديل مباشر للنصوص</title>
   <style>
     body {
       font-family: 'Cairo', sans-serif;
@@ -13,11 +13,11 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      position: relative;
     }
     canvas {
       border: 1px solid #ccc;
       margin: 10px 0;
-      cursor: crosshair;
     }
     .controls {
       margin-top: 10px;
@@ -26,10 +26,16 @@
       padding: 8px;
       margin: 5px;
     }
+    .draggable-text {
+      position: absolute;
+      cursor: move;
+      font-family: 'Cairo', sans-serif;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
-  <h2>محرر PDF متعدد الصفحات</h2>
+  <h2>محرر PDF متعدد الصفحات - بإمكانية سحب النصوص</h2>
   <input type="file" id="pdfUpload" accept="application/pdf" />
   <div class="controls">
     <input type="text" id="textInput" placeholder="اكتب النص هنا" />
@@ -57,13 +63,11 @@
     const pdfContainer = document.getElementById("pdfContainer");
     const savePdf = document.getElementById("savePdf");
 
-    let pages = [];
-    let draggingItem = null;
-    let offsetX = 0, offsetY = 0;
+    let canvases = [];
 
     pdfUpload.addEventListener("change", async function(e) {
       pdfContainer.innerHTML = "";
-      pages = [];
+      canvases = [];
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onload = async function() {
@@ -77,79 +81,80 @@
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           canvas.dataset.page = i;
-
-          await page.render({ canvasContext: ctx, viewport }).promise;
           pdfContainer.appendChild(canvas);
 
-          const items = [];
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          canvases.push(canvas);
 
           canvas.addEventListener("click", function(event) {
             const rect = canvas.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
-            const text = textInput.value;
-            const size = fontSize.value;
-            const color = textColor.value;
-            ctx.font = `${size}px Cairo`;
-            ctx.fillStyle = color;
-            ctx.textAlign = "right";
-            ctx.fillText(text, x, y);
-            items.push({ text, x, y, size, color });
-          });
 
-          canvas.addEventListener("mousedown", function(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const found = items.find(t => x >= t.x - 100 && x <= t.x + 100 && y >= t.y - 20 && y <= t.y + 20);
-            if (found) {
-              draggingItem = { canvas, item: found };
-              offsetX = x - found.x;
-              offsetY = y - found.y;
-            }
-          });
+            const div = document.createElement("div");
+            div.className = "draggable-text";
+            div.contentEditable = true;
+            div.innerText = textInput.value;
+            div.style.left = `${canvas.offsetLeft + x}px`;
+            div.style.top = `${canvas.offsetTop + y}px`;
+            div.style.fontSize = fontSize.value + "px";
+            div.style.color = textColor.value;
+            pdfContainer.appendChild(div);
 
-          canvas.addEventListener("mousemove", function(e) {
-            if (draggingItem && draggingItem.canvas === canvas) {
-              const rect = canvas.getBoundingClientRect();
-              const x = e.clientX - rect.left;
-              const y = e.clientY - rect.top;
-              draggingItem.item.x = x - offsetX;
-              draggingItem.item.y = y - offsetY;
-              renderAll();
-            }
+            makeDraggable(div);
           });
-
-          canvas.addEventListener("mouseup", function() {
-            draggingItem = null;
-          });
-
-          pages.push({ canvas, ctx, viewport, items });
         }
       };
       reader.readAsArrayBuffer(file);
     });
 
-    function renderAll() {
-      pages.forEach(({ canvas, ctx, items }) => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        items.forEach(({ text, x, y, size, color }) => {
-          ctx.font = `${size}px Cairo`;
-          ctx.fillStyle = color;
-          ctx.textAlign = "right";
-          ctx.fillText(text, x, y);
-        });
+    function makeDraggable(el) {
+      let isDragging = false;
+      let offsetX, offsetY;
+      el.addEventListener("mousedown", function(e) {
+        isDragging = true;
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+        el.style.zIndex = 1000;
+      });
+      document.addEventListener("mousemove", function(e) {
+        if (isDragging) {
+          el.style.left = `${e.pageX - offsetX}px`;
+          el.style.top = `${e.pageY - offsetY}px`;
+        }
+      });
+      document.addEventListener("mouseup", function() {
+        isDragging = false;
       });
     }
 
     savePdf.addEventListener("click", function() {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
-      pages.forEach((page, index) => {
-        const imgData = page.canvas.toDataURL("image/jpeg");
+
+      canvases.forEach((canvas, index) => {
+        const clone = canvas.cloneNode(true);
+        const ctx = clone.getContext("2d");
+        const divs = [...document.querySelectorAll('.draggable-text')].filter(d => {
+          const top = parseInt(d.style.top);
+          return top >= canvas.offsetTop && top <= canvas.offsetTop + canvas.height;
+        });
+
+        divs.forEach(d => {
+          const text = d.innerText;
+          const x = parseInt(d.style.left) - canvas.offsetLeft;
+          const y = parseInt(d.style.top) - canvas.offsetTop + 10;
+          ctx.font = `${d.style.fontSize} Cairo`;
+          ctx.fillStyle = d.style.color;
+          ctx.textAlign = "right";
+          ctx.fillText(text, x, y);
+        });
+
+        const imgData = clone.toDataURL("image/jpeg");
         if (index > 0) doc.addPage();
         doc.addImage(imgData, "JPEG", 0, 0, doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight());
       });
+
       doc.save("محرر.pdf");
     });
   </script>
